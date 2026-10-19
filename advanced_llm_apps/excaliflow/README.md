@@ -1,5 +1,7 @@
 # ✏️ Excaliflow
 
+> 🚀 **Deployed by [Devanshu Shah](https://github.com/devanshushah30)** — maintained and hosted in this fork. Original project by Shubham Saboo.
+
 **Hand-drawn diagrams with live animated flows.** Sketch out AI agents, RAG pipelines, or system architectures just like in Excalidraw, and watch data flow through your arrows in real time. Connect shapes, customize colors and sketch styles, and export a crisp 2x PNG or a 60fps video loop. Runs in a single HTML file with zero dependencies.
 
 ## Features
