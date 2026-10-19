@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node verify.js"
+    "test": "node verify.js",
+    "dev": "node dev-server.js"
   },
   "engines": {
     "node": ">=18.0.0"

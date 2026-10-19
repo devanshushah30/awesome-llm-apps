@@ -72,3 +72,61 @@ npm test
 ```
 
 Licensed under the repository's [Apache-2.0 license](../../LICENSE).
+
+## ☁️ Cloud Backend (Supabase + Vercel)
+
+This fork adds an optional cloud backend so diagrams survive across devices: save named diagrams to Supabase, load them back, overwrite a cloud copy with the current canvas, download any cloud copy as `.excaliflow.json`, or delete it. The header gains a **☁️ Cloud** button (injected by `cloud.js`).
+
+**Architecture**
+
+```text
+Browser (index.html + cloud.js)
+   │  fetch /api/*  (+ x-cloud-password header)
+   ▼
+Serverless API (api/, zero dependencies) — Vercel in prod, dev-server.js locally
+   │  Supabase REST with service_role key (server-side only, never in the browser)
+   ▼
+Supabase Postgres → public.diagrams (id, name, data jsonb, timestamps)
+```
+
+The frontend never holds a Supabase key. The API is gated by `CLOUD_PASSWORD` (prompted once per browser session, kept in `sessionStorage`).
+
+**1. Create the Supabase project** (free tier is plenty)
+
+1. Go to [supabase.com](https://supabase.com) → New project.
+2. SQL Editor → paste `supabase/schema.sql` → Run. (RLS is enabled with no public policies — access is service-role only via the API.)
+3. Project Settings → API → copy the **Project URL** and the **service_role** key.
+
+**2. Configure**
+
+```sh
+cp .env.example .env   # then fill in SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CLOUD_PASSWORD
+```
+
+**3. Run locally** (static files + `/api/*` on one port)
+
+```sh
+npm run dev   # → http://localhost:3000
+```
+
+(`npm start` still serves the static-only version via `server.js`.)
+
+**4. Deploy to Vercel**
+
+1. Import the repo `devanshushah30/awesome-llm-apps` in Vercel.
+2. Set **Root Directory** to `advanced_llm_apps/excaliflow`. No build command, no framework preset — it's static + serverless functions.
+3. Add Environment Variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLOUD_PASSWORD`.
+4. Deploy. The app is live at `https://<project>.vercel.app`; check `/api/health` returns `{"ok":true}`.
+
+**API reference**
+
+| Method | Route | Auth | Description |
+| --- | --- | --- | --- |
+| GET | `/api/health` | no | Liveness probe |
+| GET | `/api/diagrams` | password | List saves (newest first) |
+| POST | `/api/diagrams` | password | Save `{ name, data }` |
+| GET | `/api/diagrams/:id` | password | Fetch one diagram with data |
+| PATCH | `/api/diagrams/:id` | password | Update `{ name?, data? }` |
+| DELETE | `/api/diagrams/:id` | password | Delete a diagram |
+
+Auth = `x-cloud-password` header matching `CLOUD_PASSWORD`. Diagrams are capped at 10 MB each.
