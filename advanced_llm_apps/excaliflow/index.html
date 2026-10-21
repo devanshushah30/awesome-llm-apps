@@ -912,21 +912,6 @@
       <div class="v-divider"></div>
       <button id="bgWhiteBtn" class="ui-btn active" title="Pure White Canvas (#ffffff)">☀</button>
       <button id="bgBlackBtn" class="ui-btn" title="Pitch-Black Neon Canvas (#000000)">☾</button>
-      <div class="v-divider"></div>
-      <button id="btnSavePng" class="ui-btn primary" title="Export Cropped 2x Retina PNG">Export PNG</button>
-      <div class="dropdown-wrap">
-        <button id="exportMenuBtn" class="ui-btn" title="More Export &amp; Scene Actions">⋯</button>
-        <div id="exportDropdown" class="dropdown-menu glass-panel">
-          <button id="btnCopyPng" class="ui-btn menu-item"><span>Copy 2x PNG</span><span>⌘⇧C</span></button>
-          <button id="btnRecordVideo" class="ui-btn menu-item"><span>Record 60fps Video</span><span>.webm</span></button>
-          <div class="menu-sep"></div>
-          <button id="btnSaveJson" class="ui-btn menu-item"><span>Save Scene</span><span>JSON</span></button>
-          <button id="btnLoadJson" class="ui-btn menu-item"><span>Load Scene</span><span>Open</span></button>
-          <input type="file" id="jsonFileInput" accept=".json,.excaliflow,.excalidraw" style="display:none" />
-          <div class="menu-sep"></div>
-          <button id="btnClearScene" class="ui-btn menu-item danger"><span>Clear Canvas</span><span>⌫</span></button>
-        </div>
-      </div>
     </div>
   </header>
 
@@ -5800,5 +5785,8 @@
     }
   </script>
   <script src="cloud.js"></script>
+  <script src="projects.js"></script>
+  <script src="mermaid-import.js"></script>
+  <script src="selection-export.js"></script>
 </body>
 </html>

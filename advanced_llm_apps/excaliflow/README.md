@@ -13,6 +13,9 @@
 - **Multi-canvas tabs & auto-save.** Work across multiple canvas tabs in the bottom tab dock or top-left canvas switcher—create new tabs (`+ New` / `+ Canvas`), fork/duplicate a diagram (`⧉`) to compare architectures side-by-side, step between tabs (`‹` / `›`), double-click to rename, and have every tab auto-saved to your browser.
 - **Ready-made starter templates.** Load built-in diagrams for **AI Agent Swarm**, **RAG Pipeline**, **How Browsers Work**, and **Microservices** in one click.
 - **Light & dark canvas + instant export.** Switch between a clean white canvas and a pitch-black neon canvas, then export a cropped 2x PNG, copy to clipboard, record a `.webm` video loop, or save and load `.excaliflow` / `.excalidraw` JSON files.
+- **📁 Projects (v2).** Organize canvases into cloud **projects** — like Claude Projects: one project holds many canvases. Switch the left panel between **✎ Tools** and **📁 Projects** with the icon rail; browse every project and its canvases, rename canvases inline, and use each canvas's ⋯ kebab menu to duplicate, download (PNG 2x / `.excaliflow` JSON), record video, or delete. See `PRD-v2-projects-folders-mermaid.md` in this folder.
+- **Right-click selection export (v2).** Select shapes, right-click the canvas, and download *just those components* as PNG or JSON (arrows whose both endpoints are selected come along automatically).
+- **Mermaid import (v2).** Paste or upload Mermaid flowchart code (⇩ in the Projects panel) and a new canvas is generated with layered layout and flow animation on.
 
 ## How to Get Started
 
@@ -57,7 +60,16 @@ Open **http://localhost:3000** in your browser.
 ```text
 excaliflow/
 |-- index.html            Complete single-file app (UI, sketch renderer, and animation loop)
+|-- cloud.js              Cloud API client (window.ExcaliflowCloud) for the /api/* backend
+|-- projects.js           v2 Projects panel: icon rail, project tree, canvas kebab menus, downloads
+|-- projects.css          Styles for the rail, panel, menus and modal
+|-- mermaid-import.js     v2 Mermaid flowchart parser + layered layout + import modal
+|-- selection-export.js   v2 Right-click context menu: export selected components (PNG/JSON)
 |-- server.js             Zero-dependency local static server (http://localhost:3000)
+|-- dev-server.js         Local dev server: static files + /api/* handlers (npm run dev)
+|-- api/                  Vercel serverless functions (diagrams CRUD, health)
+|-- supabase/schema.sql   Postgres schema for the diagrams table
+|-- PRD-v2-projects-folders-mermaid.md   v2 product requirements & design
 |-- verify.js             Automated test suite for geometry, arrows, and interactions
 |-- package.json          Start and test scripts
 `-- README.md
@@ -75,7 +87,7 @@ Licensed under the repository's [Apache-2.0 license](../../LICENSE).
 
 ## ☁️ Cloud Backend (Supabase + Vercel)
 
-This fork adds an optional cloud backend so diagrams survive across devices: save named diagrams to Supabase, load them back, overwrite a cloud copy with the current canvas, download any cloud copy as `.excaliflow.json`, or delete it. The header gains a **☁️ Cloud** button (injected by `cloud.js`).
+This fork adds an optional cloud backend so diagrams survive across devices. Since v2 it is organized as **Projects**: each cloud row is a project (a workspace) containing many canvases (tabs). The **📁 Projects panel** (icon rail at the far left of the sidebar) is where you save, open, rename, and organize projects and canvases; `cloud.js` is now just the API client behind it. The v1 header **☁️ Cloud** button and the header export buttons were removed to keep the top nav clean — every action lives in the panel, canvas kebab menus, or the right-click menu.
 
 **Architecture**
 
