@@ -1,10 +1,11 @@
-/* Excaliflow v2 — Projects panel.
+/* Excaliflow v3 — Projects panel.
  *
- * Claude-Code-style organization: a PROJECT (a cloud-saved workspace in the
- * existing Supabase `diagrams` table) contains many CANVASES (the app's tabs).
- * Adds an icon rail (✎ Tools / 📁 Projects) to the left sidebar, a projects
- * tree with per-canvas kebab menus (rename, duplicate, PNG/JSON downloads,
- * delete), project CRUD, a save/dirty model, and .excaliflow import.
+ * ChatGPT/Claude-style organization, kept deliberately simple:
+ * a PROJECT (a cloud-saved workspace in the Supabase `diagrams` table) holds
+ * many CANVASES (the app's tabs), shown as a clean folder list in the left
+ * panel. No passwords, no save buttons to remember: projects are created
+ * instantly, renamed inline (✎), and the open project AUTO-SAVES to the
+ * cloud whenever it changes.
  *
  * Pure helpers are exported for Node tests (module.exports guard).
  * Zero dependencies.
@@ -108,6 +109,7 @@
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
   var LS_KEY = 'excaliflow.currentProjectId';
+  var PAGE_SIZE = 8;
   var ui = {
     mode: 'tools',
     projects: [],
@@ -118,6 +120,9 @@
     currentProjectName: null,
     lastHash: null,
     busy: false,
+    saving: false,
+    saveError: '',
+    showAllProjects: false,
   };
 
   function $(id) { return document.getElementById(id); }
@@ -157,43 +162,32 @@
   function renderStatus() {
     var dot = $('pxDot'), txt = $('pxStatusText');
     if (!dot || !txt) return;
-    var ready = !!(C() && C().hasPassword());
-    dot.classList.toggle('on', ready);
-    txt.textContent = ready ? 'Cloud ready (password set)' : 'Cloud — password asked on first use';
+    if (!ui.currentProjectId) {
+      dot.className = 'px-dot';
+      txt.textContent = 'Local workspace — changes stay on this device';
+      return;
+    }
+    if (ui.saving) { dot.className = 'px-dot saving'; txt.textContent = 'Saving…'; return; }
+    if (ui.saveError) { dot.className = 'px-dot err'; txt.textContent = 'Auto-save failed — will retry'; return; }
+    if (isDirty()) { dot.className = 'px-dot saving'; txt.textContent = 'Unsaved changes — auto-save on'; return; }
+    dot.className = 'px-dot on';
+    txt.textContent = 'All changes saved ✓';
   }
 
-  function saveStateText() {
-    if (!ui.currentProjectId) return 'Local only — Save creates a cloud project.';
-    return isDirty() ? 'Unsaved changes' : 'All changes saved ✓';
-  }
-
-  function renderCurrent() {
-    var card = $('pxCurrent');
-    if (!card) return;
+  function liveCanvasRows() {
     var S = app();
-    if (!S) { card.innerHTML = '<div class="px-empty">Loading…</div>'; return; }
-    syncActiveQuiet();
-    var name = ui.currentProjectId ? (ui.currentProjectName || 'Project') : 'Untitled workspace';
-    var rows = (S.tabs || []).map(function (t) {
+    return (S.tabs || []).map(function (t) {
       var active = t.id === S.activeTabId;
       return '<div class="px-row' + (active ? ' active' : '') + '" data-tab-row="' + esc(t.id) + '">' +
-        '<span class="px-row-name" data-action="canvas-open" data-id="' + esc(t.id) + '" title="' + esc(t.name) + '">' +
-          (active ? '▸ ' : '') + esc(t.name) + '</span>' +
+        '<span class="px-row-name" data-action="canvas-open" data-id="' + esc(t.id) + '" title="' + esc(t.name) + '">' + esc(t.name) + '</span>' +
         '<span class="px-row-meta">' + ((t.elements || []).length) + ' el</span>' +
         '<button class="px-kebab" data-action="canvas-kebab" data-id="' + esc(t.id) + '" title="Canvas actions">⋯</button>' +
       '</div>';
     }).join('');
-    card.innerHTML =
-      '<div class="px-card-name"><span class="px-dirty' + (isDirty() ? ' show' : '') + '"></span><span>' + esc(name) + '</span></div>' +
-      '<div class="px-save-state" id="pxSaveState">' + esc(saveStateText()) + '</div>' +
-      '<div class="px-btn-row">' +
-        '<button class="px-btn primary" data-action="save"' + (ui.busy ? ' disabled' : '') + '>Save</button>' +
-        '<button class="px-btn" data-action="save-as"' + (ui.busy ? ' disabled' : '') + '>Save as new</button>' +
-        (ui.currentProjectId ? '<button class="px-btn" data-action="rename-current">Rename</button>' : '') +
-      '</div>' +
-      '<div class="px-section-title">Canvases</div>' +
-      '<div class="px-list">' + rows + '</div>' +
-      '<button class="px-add-row" data-action="add-canvas">＋ Add canvas</button>';
+  }
+
+  function addCanvasRow() {
+    return '<button class="px-add-row" data-action="add-canvas">＋ Add canvas</button>';
   }
 
   function previewHtml(pid) {
@@ -208,34 +202,60 @@
     }).join('');
   }
 
-  function renderTree() {
-    var tree = $('pxTree');
-    if (!tree) return;
-    if (ui.listError) {
-      tree.innerHTML = '<div class="px-empty">Could not load projects: ' + esc(ui.listError) + '</div>';
-      return;
-    }
-    if (!ui.projects.length) {
-      tree.innerHTML = '<div class="px-empty">No cloud projects yet.<br>Save this workspace or start a new project.</div>';
-      return;
-    }
-    tree.innerHTML = ui.projects.map(function (p) {
-      var isCurrent = p.id === ui.currentProjectId;
-      var expanded = ui.expandedId === p.id;
-      var html = '<div class="px-row' + (isCurrent ? ' active' : '') + '">' +
-        '<button class="px-caret" data-action="toggle-project" data-id="' + esc(p.id) + '" title="' + (isCurrent ? 'Currently open' : 'Show canvases') + '">' +
-          (isCurrent ? '●' : (expanded ? '▾' : '▸')) + '</button>' +
-        '<span class="px-row-name" data-action="open-project" data-id="' + esc(p.id) + '" title="' + esc(p.name) + '">' + esc(p.name) + '</span>' +
-        '<button class="px-kebab" data-action="project-kebab" data-id="' + esc(p.id) + '" title="Project actions">⋯</button>' +
+  function projectHtml(p) {
+    var isCurrent = p.id === ui.currentProjectId;
+    var expanded = isCurrent || ui.expandedId === p.id;
+    var html = '<div class="px-row px-proj-row' + (isCurrent ? ' current' : '') + '">' +
+      '<button class="px-caret" data-action="toggle-project" data-id="' + esc(p.id) + '" title="Show canvases">' + (expanded ? '▾' : '▸') + '</button>' +
+      '<span class="px-folder">📁</span>' +
+      '<span class="px-row-name" data-action="' + (isCurrent ? 'noop' : 'open-project') + '" data-id="' + esc(p.id) + '" title="' + esc(p.name) + '">' + esc(p.name) + '</span>' +
+      '<button class="px-kebab" data-action="project-rename" data-id="' + esc(p.id) + '" title="Rename project">✎</button>' +
+      '<button class="px-kebab" data-action="project-kebab" data-id="' + esc(p.id) + '" title="Project actions">⋯</button>' +
+    '</div>';
+    if (expanded) {
+      html += '<div class="px-indent px-list">' +
+        (isCurrent ? liveCanvasRows() + addCanvasRow() : previewHtml(p.id)) +
       '</div>';
-      if (expanded && !isCurrent) {
-        html += '<div class="px-indent px-list">' + previewHtml(p.id) + '</div>';
-      }
-      return html;
-    }).join('');
+    }
+    return html;
   }
 
-  function renderAll() { renderStatus(); renderCurrent(); renderTree(); }
+  function renderList() {
+    var list = $('pxList');
+    if (!list) return;
+    var S = app();
+    if (!S) { list.innerHTML = '<div class="px-empty">Loading…</div>'; return; }
+    syncActiveQuiet();
+    var html = '';
+
+    if (!ui.currentProjectId) {
+      html += '<div class="px-group-label">Current workspace</div>';
+      html += '<div class="px-row px-proj-row">' +
+        '<span class="px-folder">📄</span>' +
+        '<span class="px-row-name px-static">Untitled workspace</span>' +
+        '<button class="px-save-link" data-action="save-workspace">Save</button>' +
+      '</div>';
+      html += '<div class="px-indent px-list">' + liveCanvasRows() + addCanvasRow() + '</div>';
+      html += '<div class="px-group-label">Projects</div>';
+    }
+
+    if (ui.listError) {
+      html += '<div class="px-empty">Could not load projects: ' + esc(ui.listError) + '</div>';
+    } else if (!ui.projects.length) {
+      html += '<div class="px-empty">No projects yet.<br>Hit ＋ above to create one.</div>';
+    } else {
+      var visible = ui.showAllProjects ? ui.projects : ui.projects.slice(0, PAGE_SIZE);
+      html += visible.map(projectHtml).join('');
+      if (!ui.showAllProjects && ui.projects.length > PAGE_SIZE) {
+        html += '<div class="px-row px-show-more" data-action="show-more"><span class="px-row-name">Show more</span></div>';
+      }
+    }
+    list.innerHTML = html;
+  }
+
+  function renderAll() { renderStatus(); renderList(); }
+  function renderCurrent() { renderAll(); } // legacy call sites
+  function renderTree() { renderList(); }    // legacy call sites
 
   // ------------------------------------------------------------ menus
   var menuEl = null;
@@ -375,8 +395,45 @@
         global.renameCanvasTab(tab.id, v);
         toast('Canvas renamed to "' + v + '"');
       }
-      renderCurrent();
+      renderList();
     }
+    wireRenameInput(input, commit);
+  }
+
+  function startRenameProject(p, anchorEl) {
+    var row = anchorEl.closest('.px-proj-row');
+    if (!row) return;
+    var nameEl = row.querySelector('.px-row-name');
+    if (!nameEl) return;
+    var input = document.createElement('input');
+    input.className = 'px-rename-input';
+    input.type = 'text';
+    input.value = p.name;
+    input.maxLength = 120;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+    var done = false;
+    async function commit(save) {
+      if (done) return;
+      done = true;
+      var v = input.value.trim().slice(0, 120);
+      if (save && v && v !== p.name) {
+        try {
+          await C().call('/api/diagrams/' + encodeURIComponent(p.id), { method: 'PATCH', body: { name: v } });
+          p.name = v;
+          if (ui.currentProjectId === p.id) ui.currentProjectName = v;
+          toast('Project renamed to "' + v + '"');
+        } catch (e) {
+          toast('Rename failed: ' + (e.message || e));
+        }
+      }
+      renderList();
+    }
+    wireRenameInput(input, commit);
+  }
+
+  function wireRenameInput(input, commit) {
     input.addEventListener('keydown', function (e) {
       e.stopPropagation();
       if (e.key === 'Enter') commit(true);
@@ -391,7 +448,7 @@
     if ((app().tabs || []).length <= 1) { toast('A project needs at least one canvas.'); return; }
     if (!window.confirm('Delete canvas "' + tab.name + '"? This cannot be undone.')) return;
     global.closeCanvasTab(tab.id);
-    renderCurrent();
+    renderList();
   }
 
   function clearActiveCanvas() {
@@ -401,15 +458,15 @@
     app().selectedIds.clear();
     if (global.ShapeCache) global.ShapeCache.clear();
     global.syncUIWithSelection();
-    renderCurrent();
+    renderList();
   }
 
   function canvasMenu(tab, anchorEl) {
     var isActive = app() && tab.id === app().activeTabId;
     var items = [
-      { label: 'Open canvas', fn: function () { global.switchCanvasTab(tab.id); renderCurrent(); } },
+      { label: 'Open canvas', fn: function () { global.switchCanvasTab(tab.id); renderList(); } },
       { label: 'Rename', fn: function () { startRenameCanvas(tab); } },
-      { label: 'Duplicate', fn: function () { global.duplicateCanvasTab(tab.id); renderCurrent(); } },
+      { label: 'Duplicate', fn: function () { global.duplicateCanvasTab(tab.id); renderList(); } },
       { sep: true },
       { label: 'Download PNG (2x)', fn: function () { downloadCanvasPng(tab); } },
       { label: 'Download .excaliflow (JSON)', fn: function () { downloadCanvasJson(tab); } },
@@ -439,11 +496,10 @@
     if (p.id !== ui.currentProjectId) {
       items.push({ label: 'Open project', fn: function () { return actOpen(p.id); } });
     }
-    items.push({ label: 'Rename project', fn: function () { return actRenameProject(p); } });
     items.push({
       label: 'Add canvas', fn: async function () {
-        if (p.id === ui.currentProjectId) { global.createCanvasTab({}); renderCurrent(); }
-        else { await doOpenProject(p.id); global.createCanvasTab({}); renderCurrent(); }
+        if (p.id === ui.currentProjectId) { global.createCanvasTab({}); renderList(); }
+        else { await doOpenProject(p.id); global.createCanvasTab({}); renderList(); }
       },
     });
     items.push({ label: 'Download project (.excaliflow)', fn: function () { return downloadProjectJson(p); } });
@@ -486,7 +542,6 @@
     try { localStorage.setItem(LS_KEY, ui.currentProjectId); } catch (e) {}
     ui.lastHash = workspaceHash();
     ui.expandedId = ui.currentProjectId;
-    toast('Project "' + name + '" saved to the cloud');
     return true;
   }
 
@@ -497,9 +552,7 @@
     }
     if (!workspaceHasContent()) return true;
     if (window.confirm('Your current workspace is not saved to a project yet.\n\nSave it as a new project before switching?')) {
-      var name = (window.prompt('Project name:', 'My Project') || '').trim().slice(0, 120);
-      if (!name) return false;
-      await doCreateProject(name);
+      await doCreateProject('Untitled Project');
       return true;
     }
     return window.confirm('Discard the current unsaved workspace and switch?');
@@ -507,7 +560,7 @@
 
   async function doOpenProject(id, thenTabId) {
     if (id === ui.currentProjectId) {
-      if (thenTabId && findTab(thenTabId)) { global.switchCanvasTab(thenTabId); renderCurrent(); }
+      if (thenTabId && findTab(thenTabId)) { global.switchCanvasTab(thenTabId); renderList(); }
       return;
     }
     if (!(await ensureSafeToReplace())) return;
@@ -570,16 +623,16 @@
   }
 
   async function toggleExpand(id) {
-    if (id === ui.currentProjectId) return; // its canvases live in the Current card
+    if (id === ui.currentProjectId) return; // the open project is always expanded
     if (ui.expandedId === id) {
       ui.expandedId = null;
       ui.preview = null;
-      renderTree();
+      renderList();
       return;
     }
     ui.expandedId = id;
     ui.preview = null;
-    renderTree();
+    renderList();
     try {
       var out = await C().call('/api/diagrams/' + encodeURIComponent(id));
       if (ui.expandedId !== id) return; // user moved on
@@ -590,7 +643,25 @@
         toast('Could not load canvases: ' + (e.message || e));
       }
     }
-    renderTree();
+    renderList();
+  }
+
+  // Auto-save: the open project quietly saves itself whenever it changes.
+  async function autoSaveTick() {
+    if (!ui.currentProjectId || ui.busy || ui.saving) return;
+    if (typeof document !== 'undefined' && document.querySelector('.px-rename-input')) return;
+    if (!isDirty()) return;
+    ui.saving = true;
+    renderStatus();
+    try {
+      await doSaveCurrent();
+      ui.saveError = '';
+    } catch (e) {
+      ui.saveError = e.message || 'save failed';
+    } finally {
+      ui.saving = false;
+      renderStatus();
+    }
   }
 
   // Guarded public actions (busy flag + error toasts + re-render).
@@ -598,7 +669,6 @@
     return async function () {
       if (ui.busy) return;
       ui.busy = true;
-      renderCurrent();
       try {
         return await fn.apply(null, arguments);
       } catch (e) {
@@ -610,51 +680,25 @@
     };
   }
 
-  var actSave = guard(async function () {
-    if (ui.currentProjectId) {
-      await doSaveCurrent();
-      toast('Saved "' + (ui.currentProjectName || 'project') + '"');
-      await refreshList();
-    } else {
-      var name = (window.prompt('Save this workspace as project:', 'My Project') || '').trim().slice(0, 120);
-      if (!name) return;
-      await doCreateProject(name);
-      await refreshList();
-    }
-  });
-
-  var actSaveAs = guard(async function () {
-    var name = (window.prompt('Save as new project:', ui.currentProjectName || 'My Project') || '').trim().slice(0, 120);
-    if (!name) return;
-    await doCreateProject(name);
+  var actSaveWorkspace = guard(async function () {
+    await doCreateProject('Untitled Project');
     await refreshList();
+    toast('Saved as "Untitled Project" — tap ✎ to rename it');
   });
 
   var actNew = guard(async function () {
-    var name = (window.prompt('Name your new project:', 'Untitled Project') || '').trim().slice(0, 120);
-    if (!name) return;
     if (!(await ensureSafeToReplace())) return;
     global.restoreWorkspaceData(blankWorkspace());
     ui.currentProjectId = null;
     ui.currentProjectName = null;
     ui.lastHash = null;
     try { localStorage.removeItem(LS_KEY); } catch (e) {}
-    await doCreateProject(name);
+    await doCreateProject('Untitled Project');
     await refreshList();
+    toast('New project created — tap ✎ to rename it');
   });
 
   var actOpen = guard(function (id, thenTabId) { return doOpenProject(id, thenTabId); });
-
-  var actRenameProject = guard(async function (p) {
-    var name = (window.prompt('Rename project:', p.name) || '').trim().slice(0, 120);
-    if (!name || name === p.name) return;
-    await C().call('/api/diagrams/' + encodeURIComponent(p.id), { method: 'PATCH', body: { name: name } });
-    p.name = name;
-    if (ui.currentProjectId === p.id) ui.currentProjectName = name;
-    toast('Renamed to "' + name + '"');
-    renderTree();
-    renderCurrent();
-  });
 
   var actDeleteProject = guard(async function (p) {
     if (!window.confirm('Delete project "' + p.name + '" from the cloud? This cannot be undone.')) return;
@@ -724,14 +768,10 @@
       '</div>' +
       '<div class="px-status">' +
         '<span class="px-dot" id="pxDot"></span>' +
-        '<span class="px-status-text" id="pxStatusText">Cloud</span>' +
-        '<button class="px-icon-btn" id="pxBtnKey" title="Set / change cloud password">🔑</button>' +
-      '</div>' +
-      '<div class="px-card" id="pxCurrent"></div>' +
-      '<div class="px-section-title">All projects' +
+        '<span class="px-status-text" id="pxStatusText"></span>' +
         '<button class="px-icon-btn" id="pxBtnRefresh" title="Refresh project list">⟳</button>' +
       '</div>' +
-      '<div class="px-list" id="pxTree"></div>' +
+      '<div class="px-list" id="pxList"></div>' +
       '<div class="px-btn-row">' +
         '<button class="px-btn" id="pxBtnImportFile">Import .excaliflow file</button>' +
         '<input type="file" id="pxFileInput" accept=".json,.excaliflow,.excalidraw" hidden />' +
@@ -743,10 +783,6 @@
 
     $('pxBtnNew').addEventListener('click', function () { actNew(); });
     $('pxBtnRefresh').addEventListener('click', function () { refreshList(); });
-    $('pxBtnKey').addEventListener('click', function () {
-      C().askPassword();
-      renderStatus();
-    });
     $('pxBtnMermaid').addEventListener('click', function () {
       if (global.ExcaliflowMermaid && global.ExcaliflowMermaid.openModal) global.ExcaliflowMermaid.openModal();
       else toast('Mermaid import is still loading…');
@@ -758,7 +794,7 @@
       var reader = new FileReader();
       reader.onload = function () {
         try {
-          if (global.importExcalidrawJson(String(reader.result || ''))) renderCurrent();
+          if (global.importExcalidrawJson(String(reader.result || ''))) renderList();
         } catch (err) {
           toast('Import failed: ' + (err.message || err));
         }
@@ -776,27 +812,28 @@
       var pid = el.getAttribute('data-pid');
       if (action === 'canvas-open') {
         global.switchCanvasTab(id);
-        renderCurrent();
+        renderList();
       } else if (action === 'canvas-kebab') {
         var tab = findTab(id);
         if (tab) canvasMenu(tab, el);
       } else if (action === 'add-canvas') {
         global.createCanvasTab({});
-        renderCurrent();
-      } else if (action === 'save') {
-        actSave();
-      } else if (action === 'save-as') {
-        actSaveAs();
-      } else if (action === 'rename-current') {
-        var p = findProject(ui.currentProjectId) || { id: ui.currentProjectId, name: ui.currentProjectName || '' };
-        actRenameProject(p);
+        renderList();
+      } else if (action === 'save-workspace') {
+        actSaveWorkspace();
+      } else if (action === 'show-more') {
+        ui.showAllProjects = true;
+        renderList();
       } else if (action === 'toggle-project') {
         toggleExpand(id);
       } else if (action === 'open-project') {
         actOpen(id);
-      } else if (action === 'project-kebab') {
+      } else if (action === 'project-rename') {
         var proj = findProject(id);
-        if (proj) projectMenu(proj, el);
+        if (proj) startRenameProject(proj, el);
+      } else if (action === 'project-kebab') {
+        var proj2 = findProject(id);
+        if (proj2) projectMenu(proj2, el);
       } else if (action === 'preview-open') {
         actOpen(pid, id);
       } else if (action === 'preview-kebab') {
@@ -813,16 +850,17 @@
     });
 
     window.addEventListener('focus', function () {
-      if (ui.mode === 'projects') renderCurrent();
+      if (ui.mode === 'projects') renderAll();
     });
     setInterval(function () {
+      autoSaveTick(); // runs in every mode — drawing happens in Tools mode
       if (ui.mode !== 'projects') return;
       if (document.querySelector('.px-rename-input')) return; // don't disrupt renaming
-      renderCurrent(); // keeps canvas list + dirty state fresh
+      renderAll();
     }, 4000);
 
     renderStatus();
-    renderCurrent();
+    renderList();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

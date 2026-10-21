@@ -212,3 +212,45 @@ Integration surface (all pre-existing app globals): `window.state`,
 Nested folders & drag-to-organize · project search · tags · SVG export ·
 per-canvas cloud rows (split `diagrams` into `projects` + `canvases` tables) ·
 Mermaid subgraphs as frames · multi-user auth via Supabase Auth.
+
+---
+
+# Addendum — v3: Radical simplification + canvas images (2026-10-21)
+
+**Feedback addressed:** the cloud password prompt made project use feel heavy;
+the panel should feel like ChatGPT/Claude projects — create instantly, chats
+(canvases) listed underneath, rename in place. Plus: images on the canvas
+with annotation on top.
+
+## Changes
+1. **No password, anywhere.** `CLOUD_PASSWORD` env var removed in Vercel
+   (backend enforces it only when set — re-enabling is a one-line env
+   change). `cloud.js` is a plain API client; the 🔑 UI is gone.
+   *Trade-off, accepted by the owner:* the API is open to anyone who knows
+   the app URL. It is a personal, unlisted deployment.
+2. **Panel redesign (reference: ChatGPT projects list).** One unified list:
+   📁 project rows (current project highlighted), canvases indented beneath,
+   ✎ inline rename on projects and canvases, ⋯ menus for the rest,
+   "Show more" beyond 8 projects. The separate workspace card is gone;
+   an unsaved workspace shows as a slim "Current workspace" group with a
+   one-tap **Save**.
+3. **Instant create + auto-save.** ＋ creates "Untitled Project" immediately
+   (rename later, like ChatGPT). The open project **auto-saves** to the
+   cloud ~4s after any change; a status line shows Saving… / All changes
+   saved ✓. Manual Save buttons removed from the main UI.
+4. **Canvas images.** New `image` element type (app core: allowed type,
+   node element, `src` preserved by createElement/sanitize, renderer
+   delegates to `images.js`). Insert via 🖼 dock button, **Ctrl+V paste**,
+   or **drag & drop** (image drops are captured before the JSON import
+   handler). Images are downscaled to max 1600px and stored as data URLs
+   inside the project (small files kept untouched). Annotate with the
+   existing text/freedraw/shape/arrow tools; right-click an image for
+   **Send to back / Bring to front**. Images render in PNG exports too.
+   *Known limits:* very large localStorage workspaces with many images can
+   hit the browser's ~5 MB local quota (cloud copy is the source of truth);
+   GIFs are stored but render as a still first frame.
+
+## Backend impact
+None beyond the env var removal — the `diagrams` table and `/api/*`
+endpoints are unchanged; images travel inside the existing workspace JSON
+(10 MB per-project cap still enforced by the API).

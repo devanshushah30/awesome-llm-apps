@@ -13,9 +13,10 @@
 - **Multi-canvas tabs & auto-save.** Work across multiple canvas tabs in the bottom tab dock or top-left canvas switcher—create new tabs (`+ New` / `+ Canvas`), fork/duplicate a diagram (`⧉`) to compare architectures side-by-side, step between tabs (`‹` / `›`), double-click to rename, and have every tab auto-saved to your browser.
 - **Ready-made starter templates.** Load built-in diagrams for **AI Agent Swarm**, **RAG Pipeline**, **How Browsers Work**, and **Microservices** in one click.
 - **Light & dark canvas + instant export.** Switch between a clean white canvas and a pitch-black neon canvas, then export a cropped 2x PNG, copy to clipboard, record a `.webm` video loop, or save and load `.excaliflow` / `.excalidraw` JSON files.
-- **📁 Projects (v2).** Organize canvases into cloud **projects** — like Claude Projects: one project holds many canvases. Switch the left panel between **✎ Tools** and **📁 Projects** with the icon rail; browse every project and its canvases, rename canvases inline, and use each canvas's ⋯ kebab menu to duplicate, download (PNG 2x / `.excaliflow` JSON), record video, or delete. See `PRD-v2-projects-folders-mermaid.md` in this folder.
-- **Right-click selection export (v2).** Select shapes, right-click the canvas, and download *just those components* as PNG or JSON (arrows whose both endpoints are selected come along automatically).
-- **Mermaid import (v2).** Paste or upload Mermaid flowchart code (⇩ in the Projects panel) and a new canvas is generated with layered layout and flow animation on.
+- **📁 Projects (v3 — dead simple).** Like ChatGPT projects: hit ＋ and a project exists instantly, canvases live underneath it like chats, rename anything inline with ✎, and the open project **auto-saves** to the cloud — no passwords, no save buttons. The left panel switches between **✎ Tools** and **📁 Projects** with the icon rail; each canvas's ⋯ menu downloads it (PNG 2x / `.excaliflow`), duplicates or deletes it. Design docs: `PRD-v2-projects-folders-mermaid.md` in this folder.
+- **🖼 Images on the canvas (v3).** Press the 🖼 dock button, paste (Ctrl+V), or drop an image file to place it on the canvas — then annotate right on top with text, freehand, shapes or arrows. Right-click an image to send it to the back. Images are downscaled (max 1600px) and stored inside the project.
+- **Right-click selection export.** Select shapes, right-click the canvas, and download *just those components* as PNG or JSON (arrows whose both endpoints are selected come along automatically).
+- **Mermaid import.** Paste or upload Mermaid flowchart code (⇩ in the Projects panel) and a new canvas is generated with layered layout and flow animation on.
 
 ## How to Get Started
 
@@ -64,7 +65,8 @@ excaliflow/
 |-- projects.js           v2 Projects panel: icon rail, project tree, canvas kebab menus, downloads
 |-- projects.css          Styles for the rail, panel, menus and modal
 |-- mermaid-import.js     v2 Mermaid flowchart parser + layered layout + import modal
-|-- selection-export.js   v2 Right-click context menu: export selected components (PNG/JSON)
+|-- selection-export.js   Right-click context menu: export selected components (PNG/JSON)
+|-- images.js             v3 Canvas images: dock button, paste & drop insert, downscale, renderer
 |-- server.js             Zero-dependency local static server (http://localhost:3000)
 |-- dev-server.js         Local dev server: static files + /api/* handlers (npm run dev)
 |-- api/                  Vercel serverless functions (diagrams CRUD, health)
@@ -101,7 +103,7 @@ Serverless API (api/, zero dependencies) — Vercel in prod, dev-server.js local
 Supabase Postgres → public.diagrams (id, name, data jsonb, timestamps)
 ```
 
-The frontend never holds a Supabase key. The API is gated by `CLOUD_PASSWORD` (prompted once per browser session, kept in `sessionStorage`).
+The frontend never holds a Supabase key. Since v3 the API runs open for this personal deployment (no password) — the backend only enforces `CLOUD_PASSWORD` if that env var is set again.
 
 **1. Create the Supabase project** (free tier is plenty)
 
@@ -112,7 +114,7 @@ The frontend never holds a Supabase key. The API is gated by `CLOUD_PASSWORD` (p
 **2. Configure**
 
 ```sh
-cp .env.example .env   # then fill in SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CLOUD_PASSWORD
+cp .env.example .env   # then fill in SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (CLOUD_PASSWORD optional)
 ```
 
 **3. Run locally** (static files + `/api/*` on one port)
@@ -127,7 +129,7 @@ npm run dev   # → http://localhost:3000
 
 1. Import the repo `devanshushah30/awesome-llm-apps` in Vercel.
 2. Set **Root Directory** to `advanced_llm_apps/excaliflow`. No build command, no framework preset — it's static + serverless functions.
-3. Add Environment Variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLOUD_PASSWORD`.
+3. Add Environment Variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (`CLOUD_PASSWORD` optional — unset = open).
 4. Deploy. The app is live at `https://<project>.vercel.app`; check `/api/health` returns `{"ok":true}`.
 
 **API reference**
@@ -141,4 +143,4 @@ npm run dev   # → http://localhost:3000
 | PATCH | `/api/diagrams/:id` | password | Update `{ name?, data? }` |
 | DELETE | `/api/diagrams/:id` | password | Delete a diagram |
 
-Auth = `x-cloud-password` header matching `CLOUD_PASSWORD`. Diagrams are capped at 10 MB each.
+Auth = optional: when `CLOUD_PASSWORD` is set, requests must send a matching `x-cloud-password` header. Diagrams are capped at 10 MB each.

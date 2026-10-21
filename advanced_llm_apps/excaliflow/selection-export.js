@@ -96,6 +96,14 @@
         { label: 'Copy selection as PNG', fn: copySelectionPng },
         { label: 'Download selection as JSON', fn: downloadSelectionJson },
       ];
+      if (n === 1 && global.ExcaliflowImages) {
+        var sel = (S.elements || []).find(function (x) { return S.selectedIds.has(x.id); });
+        if (sel && sel.type === 'image') {
+          items.push({ sep: true });
+          items.push({ label: 'Send image to back', fn: function () { global.ExcaliflowImages.reorder(sel, true); } });
+          items.push({ label: 'Bring image to front', fn: function () { global.ExcaliflowImages.reorder(sel, false); } });
+        }
+      }
     } else {
       items = [
         { label: 'Download canvas as PNG 2x', fn: function () { global.save2xPng(); } },

@@ -1677,7 +1677,7 @@
      * 4. Perimeter Sliding (focusAngle) & Arrow Geometry Engine
      * ------------------------------------------------------------------------- */
     function isNodeElement(el) {
-      return el && (el.type === 'rectangle' || el.type === 'ellipse' || el.type === 'diamond' || el.type === 'sticky' || el.type === 'text');
+      return el && (el.type === 'rectangle' || el.type === 'ellipse' || el.type === 'diamond' || el.type === 'sticky' || el.type === 'text' || el.type === 'image');
     }
 
     function angleToSide(angle) {
@@ -2271,6 +2271,18 @@
           const last = pts[pts.length - 1];
           ctx.lineTo(el.x + last[0], el.y + last[1]);
           ctx.stroke();
+        }
+        ctx.restore();
+        return;
+      }
+
+      if (el.type === 'image') {
+        if (typeof window !== 'undefined' && window.ExcaliflowImages) {
+          window.ExcaliflowImages.draw(ctx, el);
+        } else {
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(el.x, el.y, el.width || 0, el.height || 0);
         }
         ctx.restore();
         return;
@@ -2937,6 +2949,9 @@
         y2: props.y2,
         points: props.points || []
       };
+      if (type === 'image') {
+        base.src = typeof props.src === 'string' ? props.src : '';
+      }
       if (base.text && isNodeElement(base)) {
         autoFitElementToText(base, base.text);
       }
@@ -4391,7 +4406,7 @@
     /* -------------------------------------------------------------------------
      * 14. Studio Exports (2x Retina PNG, Clipboard, 60fps WebM Video, JSON)
      * ------------------------------------------------------------------------- */
-    const ALLOWED_ELEMENT_TYPES = new Set(['rectangle', 'ellipse', 'diamond', 'arrow', 'line', 'freedraw', 'text', 'sticky']);
+    const ALLOWED_ELEMENT_TYPES = new Set(['rectangle', 'ellipse', 'diamond', 'arrow', 'line', 'freedraw', 'text', 'sticky', 'image']);
     const ALLOWED_FLOW_MODES = new Set(['comets', 'pulses', 'neon', 'dashed']);
 
     function getDiagramExportBounds(padding = 48) {
@@ -5788,5 +5803,6 @@
   <script src="projects.js"></script>
   <script src="mermaid-import.js"></script>
   <script src="selection-export.js"></script>
+  <script src="images.js"></script>
 </body>
 </html>
